@@ -7,9 +7,11 @@
     // Constraint might be a object (as described in readme.md) or a function in the form "function (x, y)" that gets called before every move.
     // The function can return a boolean or a object of the form {x, y}, to which the element will be moved. "False" skips moving, true moves to raw x, y.
     draggable: function(constraint) {
-      var start, drag, end
+        var start, drag, end, startEvent, dragEvent, endEvent
         , element = this
         , parent  = this.parent._parent(SVG.Nested) || this._parent(SVG.Doc)
+      , isTouch = 'ontouchstart' in window || (navigator.msMaxTouchPoints && !navigator.msPointerEnabled )
+      , isiOS = navigator.userAgent.match(/(ip(hone|od|ad))/i) ? true : false
       
       /* remove draggable if already present */
       if (typeof this.fixed === 'function')
@@ -18,6 +20,17 @@
       /* ensure constraint object */
       constraint = constraint || {}
       
+    /* decide on event names based on touch support */
+    if (isTouch) {
+      startEvent = 'touchstart'
+      dragEvent = 'touchmove'
+      endEvent = 'touchend'
+    } else {
+      startEvent = 'mousedown'
+      dragEvent = 'mousemove'
+      endEvent = 'mouseup'      
+    }
+    
       /* start dragging */
       start = function(event) {
         event = event || window.event
@@ -56,8 +69,8 @@
         }
         
         /* add while and end events to window */
-        SVG.on(window, 'mousemove', drag)
-        SVG.on(window, 'mouseup',   end)
+        SVG.on(window, dragEvent, drag)
+        SVG.on(window, endEvent,   end)
         
         /* invoke any callbacks */
         if (element.dragstart)
@@ -77,11 +90,29 @@
             , rotation  = element.startPosition.rotation
             , width     = element.startPosition.width
             , height    = element.startPosition.height
-            , delta     = {
+          , delta
+
+          if (isTouch) {
+            if (isiOS) {
+              delta = {
                 x:    event.pageX - element.startEvent.pageX,
                 y:    event.pageY - element.startEvent.pageY,
                 zoom: element.startPosition.zoom
               }
+            } else {
+              delta = {
+                x:    event.changedTouches[0].pageX - element.startEvent.changedTouches[0].pageX,
+                y:    event.changedTouches[0].pageY - element.startEvent.changedTouches[0].pageY,
+                zoom: element.startPosition.zoom
+              }
+            }
+          } else {
+            delta = {
+                  x:    event.pageX - element.startEvent.pageX,
+                  y:    event.pageY - element.startEvent.pageY,
+                  zoom: element.startPosition.zoom
+                }
+          }
           
           /* caculate new position [with rotation correction] */
           x = element.startPosition.x + (delta.x * Math.cos(rotation) + delta.y * Math.sin(rotation))  / element.startPosition.zoom
@@ -125,21 +156,39 @@
       /* when dragging ends */
       end = function(event) {
         event = event || window.event
+      var delta
         
         /* calculate move position */
-        var delta = {
-          x:    event.pageX - element.startEvent.pageX
-        , y:    event.pageY - element.startEvent.pageY
-        , zoom: element.startPosition.zoom
+        if (isTouch) {
+          if (isiOS) {
+            delta = {
+              x:    event.pageX - element.startEvent.pageX,
+              y:    event.pageY - element.startEvent.pageY,
+              zoom: element.startPosition.zoom
+            }
+          } else {
+            delta = {
+              x:    event.changedTouches[0].pageX - element.startEvent.changedTouches[0].pageX,
+              y:    event.changedTouches[0].pageY - element.startEvent.changedTouches[0].pageY,
+              zoom: element.startPosition.zoom
+            }
+          }
+        } else {
+          delta = {
+            x:    event.pageX - element.startEvent.pageX,
+            y:    event.pageY - element.startEvent.pageY,
+            zoom: element.startPosition.zoom
+          }
         }
+
         
         /* reset store */
         element.startEvent    = null
         element.startPosition = null
 
         /* remove while and end events to window */
-        SVG.off(window, 'mousemove', drag)
-        SVG.off(window, 'mouseup',   end)
+      SVG.off(window, dragEvent, drag)
+      SVG.off(window, endEvent,   end)
 
         /* invoke any callbacks */
         if (element.dragend)
@@ -147,14 +196,14 @@
       }
       
       /* bind mousedown event */
-      element.on('mousedown', start)
+    element.on(startEvent, start)
       
       /* disable draggable */
       element.fixed = function() {
-        element.off('mousedown', start)
+      element.off(startEvent, start)
         
-        SVG.off(window, 'mousemove', drag)
-        SVG.off(window, 'mouseup',   end)
+      SVG.off(window, dragEvent, drag)
+      SVG.off(window, endEvent,   end)
         
         start = drag = end = null
         
